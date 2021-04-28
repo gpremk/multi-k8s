@@ -1,0 +1,36 @@
+sudo: required
+services:
+  - docker
+
+before_install:
+  - curl https://sdk.cloud.google.com | bash > /dev/null;
+  - source $HOME/google-cloud-sdk/path.bash.inc
+  - gcloud components update kubectl
+  - gcloud auth activate-service-account --key-file service-account.json
+  - docker build -t premkgdocker/react-test -f ./client/Dockerfile.dev ./client
+
+script:
+  - docker run -e CI=true premkgdocker/react-test npm run test
+
+after_success:
+  - docker build -t premkgdocker/multi-container-client ./client
+  - docker build -t premkgdocker/multi-container-nginx ./nginx
+  - docker build -t premkgdocker/multi-container-server ./server
+  - docker build -t premkgdocker/multi-container-worker ./worker
+  - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_ID" --password-stdin
+  - docker push premkgdocker/multi-container-client
+  - docker push premkgdocker/multi-container-nginx
+  - docker push premkgdocker/multi-container-server
+  - docker push premkgdocker/multi-container-worker
+
+deploy:
+  provider: elasticbeanstalk
+  region: "us-east-1"
+  app: "multi-container-docker"
+  env: "Multicontainerdocker-env"
+  bucket_name: "elasticbeanstalk-us-east-1-236969551149"
+  bucket_path: "multi-container-docker"
+  on:
+    branch: master
+  access_key_id: "$AWS_ACCESS_KEY"
+  secret_access_key: "$AWS_SECRET_KEY"
